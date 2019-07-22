@@ -5,14 +5,16 @@ import {
     Text,
     ActivityIndicator,
     Dimensions,
-    SafeAreaView,
-    FlatList
+    FlatList,
+    TouchableOpacity,
+    Image
 } from "react-native";
 const window = Dimensions.get('window');
 import NavigationBar from 'react-native-navbar';
 import ItemTeam from '../components/ItemTeam';
 import HTTP from '../services/HTTP';
 import Toast from 'react-native-simple-toast';
+import { Actions } from 'react-native-router-flux';
 class TeamList extends React.Component {
     constructor(props) {
         super(props);
@@ -20,7 +22,10 @@ class TeamList extends React.Component {
 			isLoadMore: false,
 			datas: [],
 			page: 1,
-			isLoadFirst: true,
+            isLoadFirst: true,
+            profile: {
+
+            }
 		};
     }
 
@@ -40,6 +45,9 @@ class TeamList extends React.Component {
 					page: response.data.current_page,
 					isLoadFirst: false
 				})
+            } else if(response && response.data.status == 401) {
+                Toast.showWithGravity(response.data.message, Toast.SHORT, Toast.TOP)
+                Actions.Login({type: 'reset'})
             } else {
                 Toast.showWithGravity(JSON.stringify(response), Toast.SHORT, Toast.TOP)
             }
@@ -73,6 +81,7 @@ class TeamList extends React.Component {
 	}
 
     render() {
+        var { profile } = this.props;
         return (
             <View style={{ flex: 1, backgroundColor: '#fff' }}>
                 <NavigationBar
@@ -86,7 +95,8 @@ class TeamList extends React.Component {
 					statusBar={{
 						style: 'light-content',
 						tintColor: '#03a9f4'
-					}}
+                    }}
+                    rightButton={<TouchableOpacity onPress={() => Actions.Profile({profile})} style={styles.rightButton}>{profile.Avatars && <Image source={{ uri : profile.Avatars.Small }} style={styles.avatar} />}</TouchableOpacity>}
                 />
                 <FlatList
                     contentContainerStyle={{backgroundColor: '#FFFFFF', paddingBottom: 15}}
@@ -113,7 +123,18 @@ const styles = StyleSheet.create({
     NavigationBar: {
 		height: 44,
 		backgroundColor: '#03a9f4',
-	},
+    },
+    rightButton: {
+		height: 44,
+        alignItems: 'center',
+		justifyContent: 'center',
+		width: 60
+    },
+    avatar: {
+        width: 30,
+        height: 30,
+        borderRadius: 15
+    }
 });
 
 export default TeamList;

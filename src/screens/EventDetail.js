@@ -6,7 +6,8 @@ import {
     ActivityIndicator,
     Dimensions,
     Image,
-    TouchableOpacity
+    TouchableOpacity,
+    Alert
 } from "react-native";
 const window = Dimensions.get('window');
 import NavigationBar from 'react-native-navbar';
@@ -22,7 +23,8 @@ class EventDetail extends React.Component {
                 
             },
             isLoading: true,
-            isEvent: true
+            isEvent: true,
+            isAllowScan: false,
         };
     }
 
@@ -40,16 +42,69 @@ class EventDetail extends React.Component {
                 this.setState({
 					isEvent: false,
 				})
+            } else if(response && response.data.status == 401) {
+                Toast.showWithGravity(response.data.message, Toast.SHORT, Toast.TOP)
+                Actions.Login({type: 'reset'})
             } else {
                 Toast.showWithGravity(JSON.stringify(response), Toast.SHORT, Toast.TOP)
             }
         }).catch(function (error) {
             
         });
-	}
+    }
+    
+    allowScan() {
+        var { event } = this.state;
+        Alert.alert(
+            'Allow Ticket scaning!',
+            'Are you sure you want to start opening tickets scanning?',
+            [
+                {
+                    text: 'Cancel',
+                    onPress: () => console.log('Cancel Pressed'),
+                    style: 'cancel',
+                },
+                { text: 'OK', onPress: () => {
+                    this.setState({ isAllowScan: true });
+                    var body = {
+                        AllowScan: 1
+                    }
+                    return HTTP.callApiWithHeader('events-scan/'+event.Id+'/allow-scan', 'POST', body).then(response => {
+                        this.setState({
+                            isAllowScan: false
+                        })
+                        if (response && response.data.status == 200) {
+                            event.AllowScan = 1;
+                            this.setState({
+                                event
+                            })
+                        } else if(response && response.data.status == -1) {
+                            Toast.showWithGravity(response.data.errors ? response.data.errors.Id : 'Error!', Toast.SHORT, Toast.BOTTOM)
+                        } else if(response && response.data.status == 401) {
+                            Toast.showWithGravity(response.data.message, Toast.SHORT, Toast.TOP)
+                            Actions.Login({type: 'reset'})
+                        } else {
+                            this.setState({
+                                isModelNoti: true,
+                                isSuccess: false,
+                                content: 'Fail!'
+                            })
+                        }
+                    }).catch(function (error) {
+                        this.setState({
+                            isModelNoti: true,
+                            isSuccess: false,
+                            content: 'Fail!'
+                        })
+                    });
+                }},
+            ],
+            { cancelable: false },
+        );
+    }
 
     render() {
-        var { event, isLoading, isEvent } = this.state;
+        var { event, isLoading, isEvent, isAllowScan } = this.state;
         return (
             <View style={{ flex: 1, backgroundColor: '#fff' }}>
                 <NavigationBar
@@ -76,21 +131,36 @@ class EventDetail extends React.Component {
                     isEvent
                     ?
                     <React.Fragment>
-                        <ScrView style={styles.container} bounces={false}>
-                            <Image style={styles.boxImageThumb} source={{ uri: event.Posters ? event.Posters.Medium : event.Poster }} />
-                            <View style={styles.content}>
-                                <Text style={styles.txtNameEvent}>{event.Title}</Text>
-                                <Text style={[styles.txtCategory, { fontWeight: 'normal' }]}>{event.EventCode}</Text>
-                                <Text style={[styles.txtCategory, { fontWeight: 'normal' }]}>{event.TimeStart + ' ~ ' + event.TimeFinish}</Text>
-                                <Text style={[styles.txtCategory, { fontWeight: 'normal' }]}>{event.Address}</Text>
+                        {
+                            isAllowScan
+                            &&
+                            <View style={{ flex: 1, top: window.height/2 - 30, width: window.width, position: 'absolute', justifyContent: 'center', alignItems: 'center' }}>
+                                <ActivityIndicator size="large" color="#0000ff" />
                             </View>
-                        </ScrView>
-                        <TouchableOpacity style={styles.btnTicket} onPress={() => Actions.EventScanTicket({event})}>
-                            <View style={styles.boxEventMoreLeft}>
-                                <Image source={require('../images/qr_scanner.png')} style={{ marginRight: 10, width: 20, height: 20 }} />
-                                <Text style={styles.txtFollow}>Scan Code</Text>
-                            </View>
-                        </TouchableOpacity>
+                        }
+                        <View style={{ opacity: isAllowScan ? 0.2 : 1, flex: 1 }}>
+                            <ScrView style={styles.container} bounces={false}>
+                                <Image style={styles.boxImageThumb} source={{ uri: event.Posters ? event.Posters.Medium : event.Poster }} />
+                                <View style={styles.content}>
+                                    <Text style={styles.txtNameEvent}>{event.Title}</Text>
+                                    <Text style={[styles.txtCategory, { fontWeight: 'normal' }]}>{event.EventCode}</Text>
+                                    <Text style={[styles.txtCategory, { fontWeight: 'normal' }]}>{event.TimeStart + ' ~ ' + event.TimeFinish}</Text>
+                                    <Text style={[styles.txtCategory, { fontWeight: 'normal' }]}>{event.Address}</Text>
+                                </View>
+                            </ScrView>
+                            <TouchableOpacity style={styles.btnTicket} onPress={() => isAllowScan ? null : event.AllowScan == 0 ? this.allowScan() : Actions.EventScanTicket({event})}>
+                                {
+                                    event.AllowScan == 0
+                                    ?
+                                    <Text style={styles.txtFollow}>Start Ticket Scanning! </Text>
+                                    :
+                                    <View style={styles.boxEventMoreLeft}>
+                                        <Image source={require('../images/qr_scanner.png')} style={{ marginRight: 10, width: 20, height: 20 }} />
+                                        <Text style={styles.txtFollow}>Scan Ticket</Text>
+                                    </View>
+                                }
+                            </TouchableOpacity>
+                        </View>
                     </React.Fragment>
                     :
                     <Text style={{ textAlign: 'center', paddingTop: 20 }}>Event is not exists.</Text>

@@ -5,7 +5,7 @@ import {
     Text,
     Image,
     TouchableOpacity,
-    SafeAreaView,
+    StatusBar,
     TextInput,
     AsyncStorage,
     ActivityIndicator
@@ -14,7 +14,9 @@ import ScrView from '../screens_view/ScrView';
 import HTTP from '../services/HTTP';
 import { Actions } from 'react-native-router-flux';
 const base64 = require('base-64');
-// import { LoginManager, AccessToken } from 'react-native-fbsdk';
+import { LoginManager, AccessToken } from 'react-native-fbsdk';
+import { GoogleSignin, statusCodes } from 'react-native-google-signin';
+GoogleSignin.configure();
 class Login extends React.Component {
     constructor(props) {
         super(props);
@@ -26,10 +28,38 @@ class Login extends React.Component {
             isSubmit: true,
             isLoading: false,
         };
+        LoginManager.logOut()
+        GoogleSignin.signOut()
+        AsyncStorage.clear()
     }
 
     shouldLogin = () => {
         return (this.state.username && this.state.password)
+    }
+
+    login(headers) {
+        return HTTP.callApi('login', 'post', null, headers).then(response => {
+            this.setState({
+                isSubmit: true,
+                isLoading: false
+            })
+            response = response.data;
+            if (response.status == 200) {
+                let arr = []
+                arr.push(['auKey', 'Authorization'])
+                arr.push(['auValue', 'Bearer '+response.data.token])
+                AsyncStorage.multiSet(arr, () => {
+                    Actions.TeamList({type: 'reset', profile: response.data})
+                })
+            } else {
+                this.setState({
+                    err_username: response.errors.UserId ? response.errors.UserId : '',
+                    err_password: response.errors.Password ? response.errors.Password : '',
+                })
+            }
+        }).catch(function (error) {
+            console.log(error);
+        });
     }
 
     submitLogin() {
@@ -44,51 +74,90 @@ class Login extends React.Component {
         const auValue = 'Basic ' + encode;
         let headers = {};
         headers[auKey] = auValue;
-        return HTTP.callApi('login', 'post', null, headers).then(response => {
-            this.setState({
-                isSubmit: true,
-                isLoading: false
-            })
-            response = response.data;
-            if (response.status == 200) {
-                let arr = []
-                arr.push(['auKey', 'Authorization'])
-                arr.push(['auValue', 'Bearer '+response.data.token])
-                AsyncStorage.multiSet(arr, () => {
-                    Actions.TeamList({type: 'reset'})
-                })
-            } else {
-                this.setState({
-                    err_username: response.errors.UserId ? response.errors.UserId : '',
-                    err_password: response.errors.Password ? response.errors.Password : '',
-                })
-            }
-        }).catch(function (error) {
-            console.log(error);
-        });
+        this.login(headers);
     }
 
     loginFacebook = () => {
-        // var { navigation } = this.props;
-        // // Attempt a login using the Facebook login dialog asking for default permissions.
-        // LoginManager.logInWithReadPermissions(["public_profile", "email"]).then(
-        //     (result) => {
-        //         if (result.isCancelled) {
-        //             //alert("Login cancelled");
-        //         } else {
-        //             AccessToken.getCurrentAccessToken().then(
-        //                 (data) => {
-        //                     const accessToken = data.accessToken.toString()
-        //                     if (accessToken) console.log(accessToken)
-        //                     else alert('Error')
-        //                 }
-        //             )
-        //         }
-        //     },
-        //     (error) => {
-        //         alert("Login fail with error: " + error);
-        //     }
-        // );
+        this.setState({
+            isSubmit: false,
+            isLoading: true,
+            err_username: '',
+            err_password: '',
+        })
+        // Attempt a login using the Facebook login dialog asking for default permissions.
+        LoginManager.logInWithReadPermissions(["public_profile", "email"]).then(
+            (result) => {
+                if (result.isCancelled) {
+                    this.setState({
+                        isSubmit: true,
+                        isLoading: false,
+                    })
+                } else {
+                    AccessToken.getCurrentAccessToken().then(
+                        (data) => {
+                            console.log(data);
+                            const accessToken = data.accessToken.toString()
+                            if (accessToken) {
+                                const auKey = 'Fbtoken';
+                                const auValue = accessToken;
+                                let headers = {};
+                                headers[auKey] = auValue;
+                                this.login(headers);
+                            }
+                            else {
+                                this.setState({
+                                    isSubmit: true,
+                                    isLoading: false,
+                                })
+                                alert('Error')
+                            }
+                        }
+                    ).catch(function (e) {
+                        console.log(e)
+                    })
+                }
+            },
+            (error) => {
+                alert("Login fail with error: " + error);
+            }
+        );
+    }
+
+    loginGoogle = async () => {
+        this.setState({
+            isSubmit: false,
+            isLoading: true,
+            err_username: '',
+            err_password: '',
+        })
+        try {
+            await GoogleSignin.hasPlayServices();
+            // GoogleSignin.configure();
+            await GoogleSignin.signIn();
+            const userInfo = await GoogleSignin.getTokens();
+            console.log(userInfo)
+            const auKey = 'Ggtoken';
+            const auValue = userInfo.accessToken;
+            let headers = {};
+            headers[auKey] = auValue;
+            this.login(headers);
+        } catch (error) {
+            console.log(error)
+            this.setState({
+                isSubmit: true,
+                isLoading: false,
+            })
+            if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+                // user cancelled the login flow
+            } else if (error.code === statusCodes.IN_PROGRESS) {
+                // operation (f.e. sign in) is in progress already
+            } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+                // play services not available or outdated
+            } else {
+                // some other error happened
+                alert('Error')
+            }
+        }
     }
 
     render() {
@@ -163,7 +232,7 @@ class Login extends React.Component {
                             <TouchableOpacity
                                 disabled={isLoading}
                                 activeOpacity={0.5}
-                                onPress={() => null}
+                                onPress={() => this.loginGoogle()}
                                 style={styles.btnLoginGoogle}>
                                     <View style={{ marginLeft: 16, width: 29, height: 29, borderRadius: 4, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center' }}>
                                         <Image source={require('../images/G_icon.png')} style={{width: 29, height: 29}} />

@@ -4,13 +4,10 @@ import {
     View,
     Text,
     ActivityIndicator,
-    Dimensions,
-    SafeAreaView,
     FlatList,
     TouchableOpacity,
     Image
 } from "react-native";
-const window = Dimensions.get('window');
 import NavigationBar from 'react-native-navbar';
 import ItemEvent from '../components/ItemEvent';
 import { Actions } from 'react-native-router-flux';
@@ -44,6 +41,9 @@ class EventList extends React.Component {
 					page: response.data.current_page,
 					isLoadFirst: false
 				})
+            } else if(response && response.data.status == 401) {
+                Toast.showWithGravity(response.data.message, Toast.SHORT, Toast.TOP)
+                Actions.Login({type: 'reset'})
             } else {
                 Toast.showWithGravity(JSON.stringify(response), Toast.SHORT, Toast.TOP)
             }
